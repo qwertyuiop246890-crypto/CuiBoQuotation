@@ -2,42 +2,42 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <!-- 加入 viewport-fit=cover 支援 iPhone 滿版螢幕與瀏海/動態島適配，防止輸入時畫面縮放 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>跨境電商精算專家 V3.4 - iOS 優化版</title>
+    <title>跨境電商精算專家 V3.3 - 深度精算版</title>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* 使用系統原生字體，獲得最接近 iOS 的視覺體驗 */
         body { 
             font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
-            -webkit-tap-highlight-color: transparent; /* 移除點擊時的預設藍色閃爍 */
+            -webkit-tap-highlight-color: transparent;
         }
-        
-        /* 隱藏數字輸入框右側的上下小箭頭 */
         input[type="number"]::-webkit-inner-spin-button,
         input[type="number"]::-webkit-outer-spin-button {
             -webkit-appearance: none;
             margin: 0;
         }
-
-        /* 底部安全區域適配 (為 iPhone Home Indicator 留白) */
         @supports (padding-bottom: env(safe-area-inset-bottom)) {
-            .pb-safe {
-                padding-bottom: env(safe-area-inset-bottom);
-            }
+            .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+        }
+        .section-title {
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #64748b;
+            margin-bottom: 0.5rem;
+            padding-left: 0.5rem;
+            letter-spacing: 0.05em;
         }
     </style>
 </head>
-<body class="bg-[#F2F2F7]"> <!-- iOS 系統設定的標準灰底色 -->
+<body class="bg-[#F2F2F7]">
     <div id="root"></div>
 
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
 
-        // 自製 iOS 風格的 Switch 開關元件
         const IosToggle = ({ checked, onChange }) => (
             <button
                 type="button"
@@ -53,24 +53,27 @@
             const [weight, setWeight] = useState('');
             const [bankRate, setBankRate] = useState(0.215);
             
+            // 將設定分為 基礎成本 與 逆算除數 兩大類
             const [config, setConfig] = useState({
-                rateMarkup: { label: '匯率加碼緩衝', value: 0.02, enabled: true, unit: '', step: '0.001' },
-                ccFee: { label: '信用卡手續費', value: 1.5, enabled: true, unit: '%', step: '0.1' },
-                sourcingFee: { label: '代購費比例', value: 10, enabled: true, unit: '%', step: '1' },
-                shippingRate: { label: '國際空運費', value: 0.252, enabled: true, unit: 'TWD/g', step: '0.001' },
-                domesticJpy: { label: '日本境內運費', value: 150, enabled: true, unit: 'JPY', step: '10' }
+                // 1. 基礎成本參數
+                rateMarkup: { label: '匯率加碼緩衝', value: 0.02, enabled: true, unit: '', step: '0.001', group: 'cost' },
+                ccFee: { label: '國外刷卡費', value: 1.5, enabled: true, unit: '%', step: '0.1', group: 'cost' },
+                sourcingFee: { label: '代購費比例', value: 10, enabled: true, unit: '%', step: '1', group: 'cost' },
+                shippingRate: { label: '國際空運費', value: 0.252, enabled: true, unit: 'TWD/g', step: '0.001', group: 'cost' },
+                domesticJpy: { label: '日本境內運費', value: 150, enabled: true, unit: 'JPY', step: '10', group: 'cost' },
+                
+                // 2. 逆算除數參數 (從售價中扣除的比例)
+                platformFee: { label: '平台刷卡抽成', value: 3, enabled: true, unit: '%', step: '1', group: 'divisor' },
+                taxRate: { label: '營業稅 (法規)', value: 5, enabled: true, unit: '%', step: '1', group: 'divisor' },
+                memberBuffer: { label: '會員風險緩衝', value: 3, enabled: true, unit: '%', step: '1', group: 'divisor' }
             });
 
             const [result, setResult] = useState(null);
 
-            // 判斷目前是否處於老闆親征模式 (作為 Segmented Control 的高亮依據)
             const isBossMode = !config.sourcingFee.enabled && !config.shippingRate.enabled && !config.domesticJpy.enabled;
 
             const updateConfig = (key, field, val) => {
-                setConfig(prev => ({
-                    ...prev,
-                    [key]: { ...prev[key], [field]: val }
-                }));
+                setConfig(prev => ({ ...prev, [key]: { ...prev[key], [field]: val } }));
             };
 
             const applyPreset = (type) => {
@@ -87,46 +90,71 @@
                 const numJpy = parseFloat(jpyPrice) || 0;
                 const numWeight = parseFloat(weight) || 0;
 
-                if (numJpy <= 0 && numWeight <= 0) {
+                if (numJpy <= 0) {
                     setResult(null);
                     return;
                 }
 
+                // 1. 計算總成本
                 const currentRate = parseFloat(bankRate) || 0;
                 const rateMarkup = config.rateMarkup.enabled ? parseFloat(config.rateMarkup.value) : 0;
                 const finalRate = currentRate + rateMarkup;
                 
                 const pureItemTwd = numJpy * finalRate;
                 const ccFeeRate = config.ccFee.enabled ? (parseFloat(config.ccFee.value) / 100) : 0;
-                const ccFeeTwd = pureItemTwd * ccFeeRate;
+                const ccFeeTwd = pureItemTwd * ccFeeRate; // 相當於 原價 * 匯率 * 1.015
+                
                 const shippingRate = config.shippingRate.enabled ? parseFloat(config.shippingRate.value) : 0;
                 const shippingTwd = numWeight * shippingRate;
+                
                 const sourcingFeeRate = config.sourcingFee.enabled ? (parseFloat(config.sourcingFee.value) / 100) : 0;
                 const sourcingFeeTwd = pureItemTwd * sourcingFeeRate;
+                
                 const domesticJpy = config.domesticJpy.enabled ? parseFloat(config.domesticJpy.value) : 0;
                 const domesticTwd = domesticJpy * finalRate;
 
                 const totalCost = pureItemTwd + ccFeeTwd + shippingTwd + sourcingFeeTwd + domesticTwd;
 
+                // 2. 判斷階梯保底利潤
                 let profit = 0;
                 if (totalCost < 100) profit = 40;
                 else if (totalCost < 200) profit = 60;
                 else if (totalCost < 300) profit = 80;
                 else profit = Math.max(totalCost * 0.2, 100);
 
-                let divisor = 0.89;
-                let tempPrice = (totalCost + profit) / divisor;
+                // 3. 計算動態逆算除數 (Divisor)
+                // V3.3 規格：>=400 時扣除 平台+稅金+會員 (預設共 11%)；<400 時僅扣除 平台+稅金 (預設共 8%)
+                const pfFee = config.platformFee.enabled ? (parseFloat(config.platformFee.value) / 100) : 0;
+                const txFee = config.taxRate.enabled ? (parseFloat(config.taxRate.value) / 100) : 0;
+                const mbFee = config.memberBuffer.enabled ? (parseFloat(config.memberBuffer.value) / 100) : 0;
+                
+                const divisorHigh = 1 - (pfFee + txFee + mbFee); // 預設 0.89
+                const divisorLow = 1 - (pfFee + txFee);          // 預設 0.92
+
+                // 先用高門檻試算
+                let tempPrice = (totalCost + profit) / divisorHigh;
+                let finalDivisor = divisorHigh;
+
+                // 若試算結果 < 400，改用低門檻除數重算
                 if (tempPrice < 400) {
-                    divisor = 0.92;
-                    tempPrice = (totalCost + profit) / divisor;
+                    finalDivisor = divisorLow;
+                    tempPrice = (totalCost + profit) / finalDivisor;
                 }
 
+                // 4. 定價尾數修飾 (進位並強迫個位數為 9 或 0)
                 const ceilPrice = Math.ceil(tempPrice);
                 let finalPrice = ceilPrice;
                 const lastDigit = ceilPrice % 10;
-                if (lastDigit !== 0 && lastDigit < 9) {
+                
+                if (lastDigit !== 0 && lastDigit !== 9) {
+                    // 若尾數是 1~8，無條件進位到下一個 9
                     finalPrice = Math.floor(ceilPrice / 10) * 10 + 9;
                 }
+
+                // 5. 整理逆算扣除的實際金額供明細顯示
+                const taxAmount = finalPrice * txFee;
+                const platformAmount = finalPrice * pfFee;
+                const bufferAmount = tempPrice >= 400 ? (finalPrice * mbFee) : 0;
 
                 setResult({
                     finalRate,
@@ -137,54 +165,78 @@
                     domesticTwd: Math.round(domesticTwd),
                     totalCost: Math.round(totalCost),
                     profit: Math.round(profit),
-                    divisor,
-                    finalPrice
+                    finalDivisor: finalDivisor.toFixed(2),
+                    finalPrice,
+                    deductions: {
+                        tax: Math.round(taxAmount),
+                        platform: Math.round(platformAmount),
+                        buffer: Math.round(bufferAmount)
+                    }
                 });
             }, [jpyPrice, weight, bankRate, config]);
 
+            const renderConfigGroup = (groupName) => {
+                const groupItems = Object.entries(config).filter(([_, item]) => item.group === groupName);
+                return (
+                    <div className="bg-white rounded-[10px] overflow-hidden shadow-sm">
+                        {groupItems.map(([key, item], index) => (
+                            <div key={key} className={`px-4 py-3 ${index !== groupItems.length - 1 ? 'border-b border-slate-100' : ''}`}>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-[17px] text-black">{item.label}</span>
+                                    <IosToggle checked={item.enabled} onChange={(val) => updateConfig(key, 'enabled', val)} />
+                                </div>
+                                <div className={`transition-all duration-300 overflow-hidden ${item.enabled ? 'max-h-12 mt-3 opacity-100' : 'max-h-0 opacity-0'}`}>
+                                    <div className="flex justify-end items-center gap-2">
+                                        <input 
+                                            type="number" 
+                                            inputMode="decimal"
+                                            step={item.step} 
+                                            value={item.value} 
+                                            onChange={(e) => updateConfig(key, 'value', e.target.value)} 
+                                            className="text-right text-[17px] font-medium text-[#007AFF] bg-[#F2F2F7] rounded-[8px] px-3 py-1.5 w-24 focus:outline-none" 
+                                        />
+                                        {item.unit && <span className="text-[15px] text-slate-400 w-10">{item.unit}</span>}
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                );
+            };
+
             return (
-                <div className="min-h-screen pb-32"> {/* 預留底部選單空間 */}
-                    {/* 頂部 Header (iOS 風格毛玻璃) */}
+                <div className="min-h-screen pb-32">
+                    {/* Header */}
                     <div className="sticky top-0 z-20 bg-[#F2F2F7]/80 backdrop-blur-xl border-b border-slate-200/50 pt-12 pb-3 px-4 mb-4">
-                        <h1 className="text-2xl font-bold text-black tracking-tight">精算專家</h1>
-                        <p className="text-slate-500 text-xs mt-1">iOS 行動優化版</p>
+                        <h1 className="text-2xl font-bold text-black tracking-tight">精算專家 V3.3</h1>
+                        <p className="text-slate-500 text-xs mt-1">老闆親征深度精算版</p>
                     </div>
 
                     <div className="px-4 max-w-md mx-auto space-y-6">
-                        
                         {/* 區塊 1：基礎輸入 */}
                         <section>
-                            <div className="uppercase text-xs font-semibold text-slate-500 mb-2 pl-2 tracking-wider">核心數據</div>
+                            <div className="section-title">核心查價數據</div>
                             <div className="bg-white rounded-[10px] overflow-hidden shadow-sm">
                                 <div className="px-4 py-3 border-b border-slate-100 flex justify-between items-center">
                                     <label className="text-[17px] text-black">商品原價 (JPY)</label>
                                     <input 
-                                        type="number" 
-                                        inputMode="decimal" 
-                                        value={jpyPrice} 
+                                        type="number" inputMode="decimal" value={jpyPrice} 
                                         onChange={(e) => setJpyPrice(e.target.value)} 
-                                        className="text-right text-xl font-semibold text-[#007AFF] focus:outline-none w-1/2 bg-transparent placeholder-slate-300" 
-                                        placeholder="0"
+                                        className="text-right text-xl font-semibold text-[#007AFF] focus:outline-none w-1/2 bg-transparent placeholder-slate-300" placeholder="0"
                                     />
                                 </div>
                                 <div className="px-4 py-3 border-b border-slate-100 flex justify-between items-center">
                                     <label className="text-[17px] text-black">商品重量 (g)</label>
                                     <input 
-                                        type="number" 
-                                        inputMode="decimal" 
-                                        value={weight} 
+                                        type="number" inputMode="decimal" value={weight} 
                                         onChange={(e) => setWeight(e.target.value)} 
-                                        className="text-right text-xl font-semibold text-[#007AFF] focus:outline-none w-1/2 bg-transparent placeholder-slate-300" 
-                                        placeholder="0"
+                                        className="text-right text-xl font-semibold text-[#007AFF] focus:outline-none w-1/2 bg-transparent placeholder-slate-300" placeholder="0"
                                     />
                                 </div>
                                 <div className="px-4 py-3 flex justify-between items-center bg-slate-50/50">
-                                    <label className="text-[15px] text-slate-600">台銀日幣賣出</label>
+                                    <label className="text-[15px] text-slate-600">台銀日幣賣出基準</label>
                                     <input 
-                                        type="number" 
-                                        inputMode="decimal" 
-                                        step="0.0001" 
-                                        value={bankRate} 
+                                        type="number" inputMode="decimal" step="0.0001" value={bankRate} 
                                         onChange={(e) => setBankRate(e.target.value)} 
                                         className="text-right text-lg font-medium text-slate-600 focus:outline-none w-1/2 bg-transparent" 
                                     />
@@ -192,117 +244,90 @@
                             </div>
                         </section>
 
-                        {/* 區塊 2：成本結構開關 */}
+                        {/* 區塊 2：雙軌定價切換 */}
                         <section>
                             <div className="flex justify-between items-end mb-2 pl-2 pr-1">
-                                <div className="uppercase text-xs font-semibold text-slate-500 tracking-wider">成本結構控制</div>
+                                <div className="section-title !mb-0">採購方案與成本控制</div>
                             </div>
-
-                            {/* iOS 風格的分段控制器 */}
-                            <div className="bg-[#E3E3E8] p-[3px] rounded-lg mb-4 flex shadow-inner">
+                            <div className="bg-[#E3E3E8] p-[3px] rounded-lg mb-3 flex shadow-inner">
                                 <button 
                                     onClick={() => applyPreset('standard')} 
                                     className={`flex-1 py-1.5 text-[14px] font-medium rounded-md transition-all ${!isBossMode ? 'bg-white shadow text-black' : 'text-slate-600'}`}
                                 >
-                                    標準空運
+                                    方案 A (標準空運)
                                 </button>
                                 <button 
                                     onClick={() => applyPreset('boss')} 
                                     className={`flex-1 py-1.5 text-[14px] font-medium rounded-md transition-all ${isBossMode ? 'bg-white shadow text-black' : 'text-slate-600'}`}
                                 >
-                                    老闆親征
+                                    方案 B (老闆帶回)
                                 </button>
                             </div>
-
-                            <div className="bg-white rounded-[10px] overflow-hidden shadow-sm">
-                                {Object.entries(config).map(([key, item], index, arr) => (
-                                    <div key={key} className={`px-4 py-3 ${index !== arr.length - 1 ? 'border-b border-slate-100' : ''}`}>
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-[17px] text-black">{item.label}</span>
-                                            <IosToggle checked={item.enabled} onChange={(val) => updateConfig(key, 'enabled', val)} />
-                                        </div>
-                                        
-                                        {/* 當開啟時，顯示可編輯的數值區域 */}
-                                        <div className={`transition-all duration-300 overflow-hidden ${item.enabled ? 'max-h-12 mt-3 opacity-100' : 'max-h-0 opacity-0'}`}>
-                                            <div className="flex justify-end items-center gap-2">
-                                                <input 
-                                                    type="number" 
-                                                    inputMode="decimal"
-                                                    step={item.step} 
-                                                    value={item.value} 
-                                                    onChange={(e) => updateConfig(key, 'value', e.target.value)} 
-                                                    className="text-right text-[17px] font-medium text-[#007AFF] bg-[#F2F2F7] rounded-[8px] px-3 py-1.5 w-24 focus:outline-none focus:ring-2 focus:ring-[#007AFF]/30" 
-                                                />
-                                                {item.unit && <span className="text-[15px] text-slate-400 w-10">{item.unit}</span>}
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
+                            {renderConfigGroup('cost')}
                         </section>
 
-                        {/* 區塊 3：詳細拆解明細 (只在有數據時顯示) */}
+                        {/* 區塊 3：逆算除數設定 (稅務/會員/金流) */}
+                        <section>
+                            <div className="section-title">逆算除數設定 (隱含成本防禦)</div>
+                            {renderConfigGroup('divisor')}
+                            <p className="text-xs text-slate-400 mt-2 px-2 leading-relaxed">
+                                系統自動判定：售價低於 400 不計入會員緩衝 (除數 0.92)；高於 400 啟動完整防禦 (除數 0.89)。開關與數值異動將即時反映。
+                            </p>
+                        </section>
+
+                        {/* 區塊 4：詳細拆解明細 */}
                         {result && (
                             <section className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                                <div className="uppercase text-xs font-semibold text-slate-500 mb-2 pl-2 tracking-wider">結構明細清單</div>
+                                <div className="section-title">深度結構明細清單</div>
                                 <div className="bg-white rounded-[10px] p-4 shadow-sm text-[15px] space-y-3">
+                                    {/* 成本區塊 */}
                                     <div className="flex justify-between text-slate-600">
                                         <span>商品換算 <span className="text-xs text-slate-400">({jpyPrice || 0} JPY)</span></span>
                                         <span>${result.pureItemTwd}</span>
                                     </div>
-                                    {config.ccFee.enabled && (
-                                        <div className="flex justify-between text-slate-600">
-                                            <span>信用卡 <span className="text-xs text-slate-400">({config.ccFee.value}%)</span></span>
-                                            <span>${result.ccFeeTwd}</span>
-                                        </div>
-                                    )}
-                                    {config.shippingRate.enabled && (
-                                        <div className="flex justify-between text-slate-600">
-                                            <span>國際運費 <span className="text-xs text-slate-400">({weight || 0}g)</span></span>
-                                            <span>${result.shippingTwd}</span>
-                                        </div>
-                                    )}
-                                    {config.sourcingFee.enabled && (
-                                        <div className="flex justify-between text-slate-600">
-                                            <span>代購費 <span className="text-xs text-slate-400">({config.sourcingFee.value}%)</span></span>
-                                            <span>${result.sourcingFeeTwd}</span>
-                                        </div>
-                                    )}
-                                    {config.domesticJpy.enabled && (
-                                        <div className="flex justify-between text-slate-600">
-                                            <span>境內運費 <span className="text-xs text-slate-400">({config.domesticJpy.value} JPY)</span></span>
-                                            <span>${result.domesticTwd}</span>
-                                        </div>
-                                    )}
-                                    <div className="border-t border-slate-100 pt-3 mt-3 flex justify-between font-semibold text-black">
-                                        <span>總成本加總</span>
+                                    {config.ccFee.enabled && <div className="flex justify-between text-slate-600"><span>信用卡費 <span className="text-xs">({config.ccFee.value}%)</span></span><span>${result.ccFeeTwd}</span></div>}
+                                    {config.shippingRate.enabled && <div className="flex justify-between text-slate-600"><span>國際運費 <span className="text-xs">({weight || 0}g)</span></span><span>${result.shippingTwd}</span></div>}
+                                    {config.sourcingFee.enabled && <div className="flex justify-between text-slate-600"><span>代購服務費 <span className="text-xs">({config.sourcingFee.value}%)</span></span><span>${result.sourcingFeeTwd}</span></div>}
+                                    {config.domesticJpy.enabled && <div className="flex justify-between text-slate-600"><span>境內運費 <span className="text-xs">({config.domesticJpy.value} JPY)</span></span><span>${result.domesticTwd}</span></div>}
+                                    
+                                    <div className="border-t border-slate-100 pt-2 flex justify-between font-semibold text-black">
+                                        <span>基礎總成本加總</span>
                                         <span>${result.totalCost}</span>
                                     </div>
-                                    <div className="flex justify-between text-[#34C759] font-medium text-sm pt-1">
-                                        <span>預估利潤 (逆算參數: {result.divisor})</span>
+
+                                    {/* 利潤區塊 */}
+                                    <div className="border-t border-slate-100 pt-2 flex justify-between text-[#007AFF] font-medium">
+                                        <span>階梯保底利潤加持</span>
                                         <span>+${result.profit}</span>
+                                    </div>
+
+                                    {/* 逆算抵扣區塊 (售價內含) */}
+                                    <div className="border-t border-slate-100 pt-2">
+                                        <div className="text-xs text-slate-400 mb-1">自最終售價逆算扣除之隱形成本 (除數: {result.finalDivisor})</div>
+                                        {config.platformFee.enabled && <div className="flex justify-between text-slate-500 text-sm"><span>平台刷卡抽成</span><span>-${result.deductions.platform}</span></div>}
+                                        {config.taxRate.enabled && <div className="flex justify-between text-slate-500 text-sm"><span>營業稅支出</span><span>-${result.deductions.tax}</span></div>}
+                                        {config.memberBuffer.enabled && result.deductions.buffer > 0 && <div className="flex justify-between text-slate-500 text-sm"><span>會員折扣吸收</span><span>-${result.deductions.buffer}</span></div>}
                                     </div>
                                 </div>
                             </section>
                         )}
                     </div>
 
-                    {/* 底部懸浮結果列 (iPhone 專屬感) */}
-                    <div className={`fixed bottom-0 left-0 right-0 bg-white/85 backdrop-blur-xl border-t border-slate-200/50 p-4 pb-safe transition-transform duration-500 z-30 ${result ? 'translate-y-0' : 'translate-y-full'}`}>
+                    {/* 底部懸浮結果列 */}
+                    <div className={`fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t border-slate-200/50 p-4 pb-safe transition-transform duration-500 z-30 ${result ? 'translate-y-0' : 'translate-y-full'}`}>
                         <div className="max-w-md mx-auto flex justify-between items-center pb-2">
                             <div>
-                                <div className="text-[13px] text-slate-500 font-medium mb-0.5">最終建議售價</div>
+                                <div className="text-[13px] text-slate-500 font-medium mb-0.5">V3.3 最終建議售價</div>
                                 <div className="text-3xl font-bold text-black tracking-tight"><span className="text-base font-semibold mr-1 text-slate-400">NT$</span>{result?.finalPrice || 0}</div>
                             </div>
                             <div className="text-right">
-                                <div className="text-[13px] text-slate-500 font-medium mb-0.5">預計淨賺</div>
+                                <div className="text-[13px] text-slate-500 font-medium mb-0.5">預計淨賺 (已扣除稅金/抽成)</div>
                                 <div className="text-xl font-bold text-[#34C759] bg-[#34C759]/10 px-3 py-1 rounded-full">
                                     +{result?.profit || 0}
                                 </div>
                             </div>
                         </div>
                     </div>
-                    
                 </div>
             );
         };
