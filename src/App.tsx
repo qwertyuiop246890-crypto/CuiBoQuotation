@@ -1,5 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { 
+  RefreshCw, Calculator, Search, Settings, Shield, Receipt, 
+  Banknote, Scale, TrendingUp, CreditCard, ShoppingCart, 
+  Plane, Truck, Store, Landmark, Users 
+} from 'lucide-react';
+
+const iconMap: Record<string, React.ReactNode> = {
+  rateMarkup: <TrendingUp size={16} className="opacity-60" />,
+  ccFee: <CreditCard size={16} className="opacity-60" />,
+  sourcingFee: <ShoppingCart size={16} className="opacity-60" />,
+  shippingRate: <Plane size={16} className="opacity-60" />,
+  domesticJpy: <Truck size={16} className="opacity-60" />,
+  platformFee: <Store size={16} className="opacity-60" />,
+  taxRate: <Landmark size={16} className="opacity-60" />,
+  memberBuffer: <Users size={16} className="opacity-60" />
+};
 
 // Types
 type ConfigItem = {
@@ -243,7 +258,10 @@ export default function App() {
       <div className="card overflow-hidden">
         {groupItems.map(([key, item], index) => (
           <div key={key} className={`px-4 py-2.5 flex justify-between items-center ${index !== groupItems.length - 1 ? 'border-b border-[var(--color-border)]' : ''}`}>
-            <span className="text-[14px] font-medium">{item.label}</span>
+            <span className="text-[14px] font-medium flex items-center gap-2">
+              {iconMap[key]}
+              {item.label}
+            </span>
             <div className="flex items-center gap-3">
               <div className={`transition-all duration-300 flex items-center justify-end ${item.enabled ? 'opacity-100 w-auto' : 'opacity-0 w-0 overflow-hidden'}`}>
                 <input 
@@ -268,7 +286,10 @@ export default function App() {
     <div className="min-h-screen font-sans bg-[var(--color-bg)] flex flex-col pb-24 lg:pb-6">
       {/* Header */}
       <div className="bg-[var(--color-bg)]/90 backdrop-blur-md border-b border-[var(--color-border)] py-3 px-6 sticky top-0 z-20">
-        <h1 className="text-xl font-bold tracking-tight text-center lg:text-left">Cuibo報價工具</h1>
+        <div className="flex items-center justify-center lg:justify-start gap-2">
+          <Calculator className="text-[var(--color-primary)]" size={22} />
+          <h1 className="text-xl font-bold tracking-tight">Cuibo報價工具</h1>
+        </div>
       </div>
 
       <div className="flex-1 w-full max-w-6xl mx-auto p-4 lg:p-6">
@@ -278,11 +299,15 @@ export default function App() {
           <div className="lg:col-span-7 space-y-5">
             {/* Base Inputs */}
             <section>
-              <div className="uppercase text-xs font-semibold opacity-70 mb-2 pl-1 tracking-wider">核心查價數據</div>
+              <div className="flex items-center gap-1.5 uppercase text-xs font-semibold opacity-70 mb-2 pl-1 tracking-wider">
+                <Search size={14} /> 核心查價數據
+              </div>
               <div className="card p-4">
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div className="bg-[var(--color-bg)] rounded-xl p-3 border border-[var(--color-border)]">
-                    <label className="text-[12px] opacity-70 block mb-1 font-medium">商品原價 (JPY)</label>
+                    <label className="text-[12px] opacity-70 flex items-center gap-1 mb-1 font-medium">
+                      <Banknote size={14} /> 商品原價 (JPY)
+                    </label>
                     <input 
                       type="number" inputMode="decimal" value={jpyPrice} 
                       onChange={(e) => setJpyPrice(e.target.value)} 
@@ -290,7 +315,9 @@ export default function App() {
                     />
                   </div>
                   <div className="bg-[var(--color-bg)] rounded-xl p-3 border border-[var(--color-border)]">
-                    <label className="text-[12px] opacity-70 block mb-1 font-medium">商品重量 (g)</label>
+                    <label className="text-[12px] opacity-70 flex items-center gap-1 mb-1 font-medium">
+                      <Scale size={14} /> 商品重量 (g)
+                    </label>
                     <input 
                       type="number" inputMode="decimal" value={weight} 
                       onChange={(e) => setWeight(e.target.value)} 
@@ -325,7 +352,9 @@ export default function App() {
             {/* Cost Configs */}
             <section>
               <div className="flex justify-between items-end mb-2 pl-1">
-                <div className="uppercase text-xs font-semibold opacity-70 tracking-wider">採購方案與成本控制</div>
+                <div className="flex items-center gap-1.5 uppercase text-xs font-semibold opacity-70 tracking-wider">
+                  <Settings size={14} /> 採購方案與成本控制
+                </div>
               </div>
               <div className="bg-[var(--color-border)] p-1 rounded-lg mb-3 flex">
                 <button 
@@ -346,7 +375,9 @@ export default function App() {
 
             {/* Divisor Configs */}
             <section>
-              <div className="uppercase text-xs font-semibold opacity-70 mb-2 pl-1 tracking-wider">逆算除數設定 (隱含成本防禦)</div>
+              <div className="flex items-center gap-1.5 uppercase text-xs font-semibold opacity-70 mb-2 pl-1 tracking-wider">
+                <Shield size={14} /> 逆算除數設定 (隱含成本防禦)
+              </div>
               {renderConfigGroup('divisor')}
               <p className="text-[11px] opacity-50 mt-2 px-1 leading-relaxed">
                 系統自動判定：售價低於 400 不計入會員緩衝 (除數 0.92)；高於 400 啟動完整防禦 (除數 0.89)。
@@ -376,7 +407,9 @@ export default function App() {
 
                 {/* Breakdown */}
                 <section className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                  <div className="uppercase text-xs font-semibold opacity-70 mb-2 pl-1 tracking-wider">深度結構明細清單</div>
+                  <div className="flex items-center gap-1.5 uppercase text-xs font-semibold opacity-70 mb-2 pl-1 tracking-wider">
+                    <Receipt size={14} /> 深度結構明細清單
+                  </div>
                   <div className="card p-5 text-[14px] space-y-3">
                     {/* 成本區塊 */}
                     <div className="flex justify-between opacity-80">
