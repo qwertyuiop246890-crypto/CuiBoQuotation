@@ -1,0 +1,21 @@
+{
+  "name": "Cuibo報價工具",
+  "short_name": "Cuibo報價",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#F5F5F7",
+  "theme_color": "#007AFF",
+  "description": "專業代購報價工具",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
